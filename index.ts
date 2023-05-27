@@ -27,14 +27,45 @@ app.get("/login", (req, res) => {
     res.redirect(`https://accounts.spotify.com/authorize?client_id=${clientID}&response_type=code&redirect_uri=${redirectURI}&state=${state}&scope=${scope}&show_dialog=true`)
 })
 
+axios.defaults.baseURL = 'https://api.spotify.com/v1/'
 
-
+const getLikedSongs = async (access_token:any) => {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    let currLink = 'me/tracks?offset=0&limit=50';
+    let songs: any[] = [];
+  
+    while (currLink !== null) {
+      try {
+        const response = await axios.get(currLink);
+        songs.push(...response.data.items);
+        currLink = response.data.next;
+      } catch (err) {
+        console.error(err);
+        throw new Error('Failed to retrieve liked songs.');
+      }
+    }
+  
+    return songs;
+  };
+  
 
 app.get('/results', (req, res) => {
     const access_token = req.query.access_token
-
+    getLikedSongs(access_token)
+    .then((songs) => {
+      console.log(songs); // Do something with the liked songs
+    })
+    .catch((err) => {
+      console.error(err);
+    });
+    // Iterate through every song in user's liked library.
+    // At every song, check through all the genres of that song.
+    // Check if playlist with that genre name exists. If it doesn't, create it and add the song.
+    // If it does exist, check if that song exists within the playlist. If it doesn't, add the song. If it does, do nothing.
     res.send('Hey!')
 })
+
+
 
 app.get("/callback", (req, res) => {
 
