@@ -105,8 +105,10 @@ const getUserID = () => {
     });
 }
 
-// TO-DO: I think the best approach is to keep a separate map of [playlistID of the genre:songs IDs of that genre[]].
-// Then, once we finish all the loops, go through each playlist ID in the map and add all the songs of that genre.
+
+
+// TO-DO: I think the best approach is to keep a separate map of [playlistID of the genre:songs IDs of that genre[]]. [X]
+// Then, once we finish all the loops, go through each playlist ID in the map and add all the songs of that genre. []
 // Otherwise, we have to add an item at every interval AKA 3000 api calls.
 
 app.get('/results', async (req, res) => {
@@ -163,8 +165,8 @@ app.get('/results', async (req, res) => {
               }
             }
             const playlistID = genrePlaylistMap.get(currGenre)
-            console.log("TRACK ID:" + currSong.track.id)
-            songMap.get(playlistID).push(songs[i].track.id)
+            console.log("TRACK ID:" + currSong.track.uri)
+            songMap.get(playlistID).push(currSong.track.uri)
           }
         } catch (error) {
           console.log(error)
@@ -173,7 +175,30 @@ app.get('/results', async (req, res) => {
     } catch (error) {
       console.log(error)
     }
-    console.log(songMap)
+
+    for (const [playlistID, uris] of songMap) {
+      if (uris.length > 0) {
+        console.log("Playlist ID:", playlistID);
+        console.log("Joined URIs:", uris);
+        axios({
+          method: 'post',
+          url: `playlists/${playlistID}/tracks`,
+          data: {
+            uris: uris,
+          }
+        })
+        .then((response:any) => {
+          console.log('Songs added to playlist')
+        })
+        .catch((error:any) => {
+          console.log('Error adding songs to playlist:', error.response ? error.response.data : error.message);
+        })
+      }
+    }
+    // Here, create a loop. This loop will go through each key value (playlistID). If the key has any value pairs (if it is not empty),
+    // then stringify every array value for that particular key together in such manner ("123", "234", "356").
+    // Then, make an api call to '/playlists/{playlist_id}/tracks' including that stringified value as a parameter named "uris"
+    
   });
 
 
