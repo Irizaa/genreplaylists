@@ -105,22 +105,42 @@ const getUserID = () => {
     });
 }
 
+// TO-DO: I think the best approach is to keep a separate map of [playlistID of the genre:songs IDs of that genre[]].
+// Then, once we finish all the loops, go through each playlist ID in the map and add all the songs of that genre.
+// Otherwise, we have to add an item at every interval AKA 3000 api calls.
+
 app.get('/results', async (req, res) => {
+
+    // Save access token and set authorization header for API as default.
     const access_token = req.query.access_token
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
+
     const genrePlaylistMap = new Map()
+    const songMap = new Map()
 
     try {
+      // Get userID, then use that to get a list of user playlists. Add all the playlists to the map.
       const userID = await getUserID()
       console.log(userID)
 
       const playlists = await getUserPlaylists(userID)
       console.log(playlists)
+
+      for(let i = 0; i < playlists.length; i++) {
+        if(playlists[i].owner.id == userID) {
+            genrePlaylistMap.set(playlists[i].name, playlists[i].id)
+            songMap.set(playlists[i].id, [])
+        }
+      }
+
       res.send('2')
+
+      // Get user's liked songs, then iterate through each one and add it to the respective genre playlist.
       const songs = await getLikedSongs(access_token)
   
       for (let i = 0; i < songs.length; i++) {
-        const currArtist = songs[i].track.artists[0].id
+        const currSong = songs[i]
+        const currArtist = currSong.track.artists[0].id
         console.log(currArtist)
   
         try {
@@ -134,6 +154,7 @@ app.get('/results', async (req, res) => {
             if (!genrePlaylistMap.has(currGenre)) {
               try {
                 const playlistID = await createPlaylist(currGenre, userID)
+                songMap.set(playlistID, [])
                 genrePlaylistMap.set(currGenre, playlistID)
                 // delay of 1 second between API requests
                 await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -141,6 +162,9 @@ app.get('/results', async (req, res) => {
                 console.log(error)
               }
             }
+            const playlistID = genrePlaylistMap.get(currGenre)
+            console.log("TRACK ID:" + currSong.track.id)
+            songMap.get(playlistID).push(songs[i].track.id)
           }
         } catch (error) {
           console.log(error)
@@ -149,8 +173,7 @@ app.get('/results', async (req, res) => {
     } catch (error) {
       console.log(error)
     }
-  
-    res.send('Hey!')
+    console.log(songMap)
   });
 
 
