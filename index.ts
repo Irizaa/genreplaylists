@@ -51,72 +51,107 @@ const getLikedSongs = async (access_token:any) => {
   };
   
 const createPlaylist = (genre: string, userID: string) => {
-    axios({
+    return axios({
         method: 'post',
         url: `users/${userID}/playlists`,
         data: {
             "name": `${genre}`
         }
     })
-}  
+    .then((response:any) => response.data.id)
+    .catch((error:any) => {
+        console.log(error)
+        throw error
+    });
+    
+} 
+const getUserPlaylists = async (userID: string) => {
+    let currLink = `users/${userID}/playlists?offset=0&limit=50`
+    let playlists: any[] = []
+
+    while(currLink !== null) {
+        try {
+            const response = await axios.get(currLink)
+            playlists.push(...response.data.items)
+            currLink = response.data.next
+        } catch (err){
+            console.error(err)
+            throw new Error('Failed to retrieve user playlists.')
+        }
+    }
+    return playlists
+    // let currLink = 'me/tracks?offset=0&limit=50'
+    // let songs: any[] = []
+  
+    // // while (currLink !== null) { // Commenting this out for easier testing. Will add it back in when functionality is guaranteed.
+    //   try {
+    //     const response = await axios.get(currLink)
+    //     songs.push(...response.data.items)
+    //     currLink = response.data.next
+    //   } catch (err) {
+    //     console.error(err)
+    //     throw new Error('Failed to retrieve liked songs.')
+    //   }
+    // // }
+  
+    // return songs
+} 
 const getUserID = () => {
     return axios.get('me')
     .then((response:any) => response.data.id)
     .catch((error:any) => {
-        console.log(error);
-        throw error; // Rethrow the error to be caught later, if needed
+        console.log(error)
+        throw error
     });
 }
 
 app.get('/results', async (req, res) => {
     const access_token = req.query.access_token
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-    let userID:any
+    const genrePlaylistMap = new Map()
+
     try {
-        userID = await getUserID()
-        console.log(userID)
-    } catch (error) {
-        console.log(error)
-    }
+      const userID = await getUserID()
+      console.log(userID)
 
-    console.log(userID)
-    let map:string[] = []
-
-    getLikedSongs(access_token)
-    .then((songs) => {
-      for(let i = 0; i < songs.length; i++) {
-        let currArtist = songs[i].track.artists[0].id
+      const playlists = await getUserPlaylists(userID)
+      console.log(playlists)
+      res.send('2')
+      const songs = await getLikedSongs(access_token)
+  
+      for (let i = 0; i < songs.length; i++) {
+        const currArtist = songs[i].track.artists[0].id
         console.log(currArtist)
-        
-        axios.get(`/artists/${currArtist}`)
-        .then((response:any) => {
-            let currGenres = response.data.genres
-            for(let j = 0; j < currGenres.length; j++) {
-                let currGenre = currGenres[j]
-                console.log(currGenre)
-                
-                if(!map.includes(currGenre)) {
-                    createPlaylist(currGenre, userID)
-                    map.push(currGenre)
-                }
+  
+        try {
+          const response = await axios.get(`/artists/${currArtist}`)
+          const currGenres = response.data.genres
+  
+          for (let j = 0; j < currGenres.length; j++) {
+            const currGenre = currGenres[j]
+            console.log(currGenre)
+  
+            if (!genrePlaylistMap.has(currGenre)) {
+              try {
+                const playlistID = await createPlaylist(currGenre, userID)
+                genrePlaylistMap.set(currGenre, playlistID)
+                // delay of 1 second between API requests
+                await new Promise((resolve) => setTimeout(resolve, 1000))
+              } catch (error) {
+                console.log(error)
+              }
             }
-        })
-        .catch((error:any) => {
-            console.log(error)
-        })
-        
+          }
+        } catch (error) {
+          console.log(error)
+        }
       }
-    })
-    .catch((err) => {
-      console.error(err);
-    });
-    // Iterate through every song in user's liked library. \DONE
-    // At every song, get the Spotify ID of the artist for that song. \DONE
-    // Then, with that ID, get the artist's genres. (https://developer.spotify.com/documentation/web-api/reference/get-an-artist) \DONE
-    // Map ====> Key(STRING): Genre | Value(STRING[]): List of songs.
-    // If the genre does not exist as a playlist, create it. Then, add the song to the genre playlist.
+    } catch (error) {
+      console.log(error)
+    }
+  
     res.send('Hey!')
-})
+  });
 
 
 
