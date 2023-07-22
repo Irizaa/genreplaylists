@@ -31,6 +31,29 @@ app.get("/login", (req, res) => {
 
 axios.defaults.baseURL = 'https://api.spotify.com/v1/'
 
+// Create function with parameters of playlist_id which get's a users items from the current playlist. It should return a list of all 
+// song URIs from that playlist. We then cross-check the song-URIs we gathered with the song URIs in the current map value in the loop iteration.
+// If the URI is in the map, remove it.
+// Accomplish this with the Get Playlist Items Spotify API path. (GET /playlists/{playlist_id}/tracks)
+
+const filterPlaylistSongURIs = async(playlistID:string, uris:string[]) => {
+  let currLink = `playlists/${playlistID}/tracks`
+  let playlistSongs:any[] = []
+  while(currLink !== null) {
+    try {
+      const response = await axios.get(currLink)
+      for(let i = 0; i < response.data.items.length; i++) {
+        playlistSongs.push(response.data.items[i].track.uri)
+      }
+      currLink = response.data.next
+    } catch (err) {
+      console.error(err)
+    }
+  }
+  const filteredURIs = uris.filter((uri) => !playlistSongs.includes(uri))
+  return filteredURIs
+}
+
 const getLikedSongs = async (access_token:any) => {
     
     let currLink = 'me/tracks?offset=0&limit=50'
@@ -178,27 +201,28 @@ app.get('/results', async (req, res) => {
 
     for (const [playlistID, uris] of songMap) {
       if (uris.length > 0) {
-        console.log("Playlist ID:", playlistID);
-        console.log("Joined URIs:", uris);
-        axios({
-          method: 'post',
-          url: `playlists/${playlistID}/tracks`,
-          data: {
-            uris: uris,
-          }
-        })
-        .then((response:any) => {
-          console.log('Songs added to playlist')
-        })
-        .catch((error:any) => {
-          console.log('Error adding songs to playlist:', error.response ? error.response.data : error.message);
-        })
+        console.log("Playlist ID:", playlistID)
+        console.log("Joined URIs:", uris)
+        try {
+          const filteredURIs = await filterPlaylistSongURIs(playlistID, uris)
+          axios({
+            method: 'post',
+            url: `playlists/${playlistID}/tracks`,
+            data: {
+              uris: filteredURIs,
+            }
+          })
+          .then((response:any) => {
+            console.log('Songs added to playlist')
+          })
+          .catch((error:any) => {
+            console.log('Error adding songs to playlist')
+          })
+        } catch (error) {
+          console.log('Error processing playlists')
+        }
       }
     }
-    // Here, create a loop. This loop will go through each key value (playlistID). If the key has any value pairs (if it is not empty),
-    // then stringify every array value for that particular key together in such manner ("123", "234", "356").
-    // Then, make an api call to '/playlists/{playlist_id}/tracks' including that stringified value as a parameter named "uris"
-    
   });
 
 
