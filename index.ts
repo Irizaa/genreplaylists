@@ -55,13 +55,15 @@ const filterPlaylistSongURIs = async(playlistID:string, uris:string[]) => {
 }
 
 const getLikedSongs = async (access_token:any) => {
-    
+    let currSongs = 50
     let currLink = 'me/tracks?offset=0&limit=50'
     let songs: any[] = []
   
-    // while (currLink !== null) { // Commenting this out for easier testing. Will add it back in when functionality is guaranteed.
+    // while (currLink !== null) { Commenting this out for easier testing. Will add it back in when functionality is guaranteed.
       try {
         const response = await axios.get(currLink)
+        console.log(`${currSongs} + completed`)
+        currSongs+=50
         songs.push(...response.data.items)
         currLink = response.data.next
       } catch (err) {
@@ -119,6 +121,8 @@ const getUserPlaylists = async (userID: string) => {
   
     // return songs
 } 
+
+
 const getUserID = () => {
     return axios.get('me')
     .then((response:any) => response.data.id)
@@ -128,28 +132,44 @@ const getUserID = () => {
     });
 }
 
+app.get('/delete', async (req, res) => {
+  // Get all user playlists.
+  // For each playlist: if name is not in list of names, unfollow
+  const userID = await getUserID()
 
-
-// TO-DO: I think the best approach is to keep a separate map of [playlistID of the genre:songs IDs of that genre[]]. [X]
-// Then, once we finish all the loops, go through each playlist ID in the map and add all the songs of that genre. []
-// Otherwise, we have to add an item at every interval AKA 3000 api calls.
+  const myPlaylists = ['Hey... I Won.', 'songs from before', '3 memories?', '2 chaeyoungdancecompilation', '1 sooo', '4 danny', 'PLAY']
+  const allPlaylists = await getUserPlaylists(userID)
+  console.log(allPlaylists[0])
+  for(let i = 0; i < allPlaylists.length; i++) {
+    if(!myPlaylists.includes(allPlaylists[i].name)) {
+      axios.delete(`playlists/${allPlaylists[i].id}/followers`)
+      .then((response:any) => {
+        console.log(`Deleted playlist:  ${allPlaylists[i].name}`)
+      })
+      .catch((error:any) => {
+        console.log(`Failed to delete playlist ${allPlaylists[i].name} `)
+      })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+  res.send('yo')
+})
 
 app.get('/results', async (req, res) => {
 
     // Save access token and set authorization header for API as default.
     const access_token = req.query.access_token
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-
     const genrePlaylistMap = new Map()
     const songMap = new Map()
 
     try {
       // Get userID, then use that to get a list of user playlists. Add all the playlists to the map.
       const userID = await getUserID()
-      console.log(userID)
+      // console.log(userID)
 
       const playlists = await getUserPlaylists(userID)
-      console.log(playlists)
+      // console.log(playlists)
 
       for(let i = 0; i < playlists.length; i++) {
         if(playlists[i].owner.id == userID) {
@@ -166,7 +186,7 @@ app.get('/results', async (req, res) => {
       for (let i = 0; i < songs.length; i++) {
         const currSong = songs[i]
         const currArtist = currSong.track.artists[0].id
-        console.log(currArtist)
+        // console.log(currArtist)
   
         try {
           const response = await axios.get(`/artists/${currArtist}`)
@@ -174,7 +194,7 @@ app.get('/results', async (req, res) => {
   
           for (let j = 0; j < currGenres.length; j++) {
             const currGenre = currGenres[j]
-            console.log(currGenre)
+            // console.log(currGenre)
   
             if (!genrePlaylistMap.has(currGenre)) {
               try {
@@ -182,13 +202,13 @@ app.get('/results', async (req, res) => {
                 songMap.set(playlistID, [])
                 genrePlaylistMap.set(currGenre, playlistID)
                 // delay of 1 second between API requests
-                await new Promise((resolve) => setTimeout(resolve, 1000))
+                await new Promise((resolve) => setTimeout(resolve, 100))
               } catch (error) {
                 console.log(error)
               }
             }
             const playlistID = genrePlaylistMap.get(currGenre)
-            console.log("TRACK ID:" + currSong.track.uri)
+            // console.log("TRACK ID:" + currSong.track.uri)
             songMap.get(playlistID).push(currSong.track.uri)
           }
         } catch (error) {
@@ -201,8 +221,8 @@ app.get('/results', async (req, res) => {
 
     for (const [playlistID, uris] of songMap) {
       if (uris.length > 0) {
-        console.log("Playlist ID:", playlistID)
-        console.log("Joined URIs:", uris)
+        // console.log("Playlist ID:", playlistID)
+        // console.log("Joined URIs:", uris)
         try {
           const filteredURIs = await filterPlaylistSongURIs(playlistID, uris)
           axios({
