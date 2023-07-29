@@ -106,23 +106,26 @@ const getUserPlaylists = async (userID: string) => {
         }
     }
     return playlists
-    // let currLink = 'me/tracks?offset=0&limit=50'
-    // let songs: any[] = []
-  
-    // // while (currLink !== null) { // Commenting this out for easier testing. Will add it back in when functionality is guaranteed.
-    //   try {
-    //     const response = await axios.get(currLink)
-    //     songs.push(...response.data.items)
-    //     currLink = response.data.next
-    //   } catch (err) {
-    //     console.error(err)
-    //     throw new Error('Failed to retrieve liked songs.')
-    //   }
-    // // }
-  
-    // return songs
 } 
 
+const backoffRetry = async (url: string, maxRetries = 3) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await axios(url);
+      return response.data;
+    } catch (error: any) { // Use 'any' to specify AxiosError type
+      if (error.response?.status === 429 && error.response.headers?.['retry-after']) {
+        const retryAfterSeconds = parseInt(error.response.headers['retry-after'], 10);
+        console.log(`Rate limited. Retrying after ${retryAfterSeconds} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
+      } else {
+        console.error('Error occurred:', error.message || error);
+        throw error;
+      }
+    }
+  }
+  throw new Error(`Max retries (${maxRetries}) reached. Request failed.`);
+};
 
 const getUserID = () => {
     return axios.get('me')
@@ -176,7 +179,7 @@ app.get('/results', async (req, res) => {
       for(let i = 0; i < playlists.length; i++) {
         if(playlists[i].owner.id == userID) {
             genrePlaylistMap.set(playlists[i].name, playlists[i].id) // genre name | genre id
-            songMap.set(playlists[i].id, []) // genre id | songs needed to be added to that genre id
+            songMap.set(playlists[i].name, []) // genre id | songs needed to be added to that genre id
         }
       }
 
@@ -193,73 +196,78 @@ app.get('/results', async (req, res) => {
         // console.log(currArtist)
   
         try {
-          const response = await axios.get(`/artists/${currArtist}`)
+          const response = await backoffRetry(`/artists/${currArtist}`)
           const currGenres = response.data.genres
   
           for (let j = 0; j < currGenres.length; j++) {
             const currGenre = currGenres[j]
-            // console.log(currGenre)
 
-            // pop: 1,2,3,4,5
-            if (!genrePlaylistMap.has(currGenre)) {
+            if (!songMap.has(currGenre)) {
               try {
-                const playlistID = await createPlaylist(currGenre, userID) // Get the ID for the genre-playlist we just created
-                songMap.set(playlistID, []) // Create the song-map key-value pair for that playlist
-                genrePlaylistMap.set(currGenre, playlistID) // Update genre-playlist map (add current genre | genre-playlist ID)
-                console.log(`Created new playlist for ${currGenre}`) // 
-                // delay of 1 second between API requests
+                // const playlistID = await createPlaylist(currGenre, userID) // Get the ID for the genre-playlist we just created
+                // songMap.set(playlistID, []) // Create the song-map key-value pair for that playlist
+                // genrePlaylistMap.set(currGenre, playlistID) // Update genre-playlist map (add current genre | genre-playlist ID)
+                // console.log(`Created new playlist for ${currGenre}`) 
+                // await new Promise((resolve) => setTimeout(resolve, 200))
+                await new Promise((resolve) => setTimeout(resolve, 200))
+                // // delay of 1 second between API requests
+                songMap.set(currGenre, [])
               } catch (error) {
                 console.log('error adding playlist to map')
               }
+            } else {
+              console.log(`Playlist already seen: ${currGenre}`)
             }
-            const playlistID = genrePlaylistMap.get(currGenre)
-            // console.log("TRACK ID:" + currSong.track.uri)
-            // 
-            songMap.get(playlistID).push(currSong.track.uri)
-            await new Promise((resolve) => setTimeout(resolve, 200))
+            // const playlistID = genrePlaylistMap.get(currGenre)
+            // songMap.get(playlistID).push(currSong.track.uri)
+            console.log(`added song to genre ${currGenre} map`)
+            songMap.get(currGenre).push(currSong.track.uri)
           }
         } catch (error) {
           console.log(error)
         }
         counter++
+        console.log(`FINISHED ${counter} SONGS`)
         if(counter % 200 === 0) {
           axios.get(`http://localhost:3000/refresh_token?refresh_token=${refresh_token}` )
           .then((response:any) => {
             axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
           })
         }
-        await new Promise((resolve) => setTimeout(resolve, 200))
       }
     } catch (error) {
       console.log(error)
     }
     // songMap already has every keyvalue pair [playlist ID of genre | all the songs IDS to be added to that playlist]
-    for (const [playlistID, uris] of songMap) {
-      if (uris.length > 0) {
-        // console.log("Playlist ID:", playlistID)
-        // console.log("Joined URIs:", uris)
+    for (const [playlistGenre, uris] of songMap) {
+      if (uris.length >= 10) {
         try {
-          const filteredURIs = await filterPlaylistSongURIs(playlistID, uris)
-          axios({
+          const userID = await getUserID();
+          const playlistID = await createPlaylist(playlistGenre, userID);
+    
+          const data = {
+            uris: uris,
+          };
+    
+          await axios({
             method: 'post',
             url: `playlists/${playlistID}/tracks`,
-            data: {
-              uris: filteredURIs,
-            }
-          })
-          .then((response:any) => {
-            console.log(`Songs added to playlist ${playlistID}`)
-          })
-          .catch((error:any) => {
-            console.log('Error adding songs to playlist')
-          })
+            data: JSON.stringify(data), // Stringify the data
+            headers: {
+              'Content-Type': 'application/json', // Set the appropriate Content-Type header
+            },
+          });
+    
+          console.log(`Songs added to playlist ${playlistID}`);
         } catch (error) {
-          console.log('Error processing playlists')
+          console.log(error);
         }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 200))
+    
+        await new Promise((resolve) => setTimeout(resolve, 200));
     }
-  });
+  }
+  console.log('Finished All Playlists.')
+});
 
 
 
