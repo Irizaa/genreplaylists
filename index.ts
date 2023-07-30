@@ -54,7 +54,7 @@ const getLikedSongs = async (access_token:any) => {
     let currLink = 'me/tracks?offset=0&limit=50'
     let songs: any[] = []
   
-    while (currLink !== null) { // Commenting this out for easier testing. Will add it back in when functionality is guaranteed.
+    while (currLink !== null) { // Comment out for easier testing.
       try {
         const response = await axios.get(currLink)
         console.log(`${currSongs} + completed`)
@@ -108,7 +108,7 @@ const backoffRetry = async (url: string, maxRetries = 3) => {
     try {
       const response = await axios(url)
       return response.data
-    } catch (error: any) { // Use 'any' to specify AxiosError type
+    } catch (error: any) { 
       if (error.response?.status === 429 && error.response.headers?.['retry-after']) {
         const retryAfterSeconds = parseInt(error.response.headers['retry-after'], 10)
         console.log(`Rate limited. Retrying after ${retryAfterSeconds} seconds...`)
@@ -211,8 +211,6 @@ app.get('/results', async (req, res) => {
             } else {
               console.log(`Playlist already seen: ${currGenre}`)
             }
-            // const playlistID = genrePlaylistMap.get(currGenre)
-            // songMap.get(playlistID).push(currSong.track.uri)
             console.log(`added song to genre ${currGenre} map`)
             songMap.get(currGenre).push(currSong.track.uri)
           }
@@ -235,25 +233,25 @@ app.get('/results', async (req, res) => {
     for (const [playlistGenre, uris] of songMap) {
       if (uris.length >= 10) {
         try {
-          const userID = await getUserID();
-          const playlistID = await createPlaylist(playlistGenre, userID);
+          const userID = await getUserID()
+          const playlistID = await createPlaylist(playlistGenre, userID)
     
           const data = {
             uris: uris,
-          };
+          }
     
           await axios({
             method: 'post',
             url: `playlists/${playlistID}/tracks`,
-            data: JSON.stringify(data), // Stringify the data
+            data: JSON.stringify(data),
             headers: {
-              'Content-Type': 'application/json', // Set the appropriate Content-Type header
+              'Content-Type': 'application/json', 
             },
-          });
+          })
     
-          console.log(`Songs added to playlist ${playlistID}`);
+          console.log(`Songs added to playlist ${playlistID}`)
         } catch (error) {
-          console.log(error);
+          console.log(error)
         }
     
         await new Promise((resolve) => setTimeout(resolve, 200));
