@@ -31,11 +31,6 @@ app.get("/login", (req, res) => {
 
 axios.defaults.baseURL = 'https://api.spotify.com/v1/'
 
-// Create function with parameters of playlist_id which get's a users items from the current playlist. It should return a list of all 
-// song URIs from that playlist. We then cross-check the song-URIs we gathered with the song URIs in the current map value in the loop iteration.
-// If the URI is in the map, remove it.
-// Accomplish this with the Get Playlist Items Spotify API path. (GET /playlists/{playlist_id}/tracks)
-
 const filterPlaylistSongURIs = async(playlistID:string, uris:string[]) => {
   let currLink = `playlists/${playlistID}/tracks`
   let playlistSongs:any[] = []
@@ -111,20 +106,20 @@ const getUserPlaylists = async (userID: string) => {
 const backoffRetry = async (url: string, maxRetries = 3) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const response = await axios(url);
-      return response.data;
+      const response = await axios(url)
+      return response.data
     } catch (error: any) { // Use 'any' to specify AxiosError type
       if (error.response?.status === 429 && error.response.headers?.['retry-after']) {
-        const retryAfterSeconds = parseInt(error.response.headers['retry-after'], 10);
-        console.log(`Rate limited. Retrying after ${retryAfterSeconds} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
+        const retryAfterSeconds = parseInt(error.response.headers['retry-after'], 10)
+        console.log(`Rate limited. Retrying after ${retryAfterSeconds} seconds...`)
+        await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
       } else {
-        console.error('Error occurred:', error.message || error);
-        throw error;
+        console.error('Error occurred:', error.message || error)
+        throw error
       }
     }
   }
-  throw new Error(`Max retries (${maxRetries}) reached. Request failed.`);
+  throw new Error(`Max retries (${maxRetries}) reached. Request failed.`)
 };
 
 const getUserID = () => {
@@ -165,7 +160,7 @@ app.get('/results', async (req, res) => {
     const access_token = req.query.access_token
     const refresh_token = req.query.refresh_token
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-    const genrePlaylistMap = new Map()
+    const artistMap = new Map()
     const songMap = new Map()
 
     try {
@@ -178,8 +173,7 @@ app.get('/results', async (req, res) => {
 
       for(let i = 0; i < playlists.length; i++) {
         if(playlists[i].owner.id == userID) {
-            genrePlaylistMap.set(playlists[i].name, playlists[i].id) // genre name | genre id
-            songMap.set(playlists[i].name, []) // genre id | songs needed to be added to that genre id
+            songMap.set(playlists[i].name, []) 
         }
       }
 
@@ -190,27 +184,26 @@ app.get('/results', async (req, res) => {
       const songs = await getLikedSongs(access_token)
   
       for (let i = 0; i < songs.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200))
+
         const currSong = songs[i]
         const currArtist = currSong.track.artists[0].id
-        // console.log(currArtist)
-  
+
         try {
-          const response = await backoffRetry(`/artists/${currArtist}`)
-          const currGenres = response.data.genres
-  
+          let currGenres: any[]
+          if(!artistMap.has(currArtist)) {
+            await new Promise((resolve) => setTimeout(resolve, 200))
+            const response = await backoffRetry(`/artists/${currArtist}`)
+            currGenres = response.data.genres
+            artistMap.set(currArtist, currGenres)
+          } else {
+            currGenres = artistMap.get(currArtist)
+          }
           for (let j = 0; j < currGenres.length; j++) {
             const currGenre = currGenres[j]
 
             if (!songMap.has(currGenre)) {
               try {
-                // const playlistID = await createPlaylist(currGenre, userID) // Get the ID for the genre-playlist we just created
-                // songMap.set(playlistID, []) // Create the song-map key-value pair for that playlist
-                // genrePlaylistMap.set(currGenre, playlistID) // Update genre-playlist map (add current genre | genre-playlist ID)
-                // console.log(`Created new playlist for ${currGenre}`) 
-                // await new Promise((resolve) => setTimeout(resolve, 200))
                 await new Promise((resolve) => setTimeout(resolve, 200))
-                // // delay of 1 second between API requests
                 songMap.set(currGenre, [])
               } catch (error) {
                 console.log('error adding playlist to map')
@@ -238,7 +231,7 @@ app.get('/results', async (req, res) => {
     } catch (error) {
       console.log(error)
     }
-    // songMap already has every keyvalue pair [playlist ID of genre | all the songs IDS to be added to that playlist]
+
     for (const [playlistGenre, uris] of songMap) {
       if (uris.length >= 10) {
         try {
