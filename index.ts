@@ -69,7 +69,7 @@ const getLikedSongs = async (access_token:any) => {
     }
   
     return songs
-  };
+  }
 
 const createPlaylist = (genre: string, userID: string) => {
     return axios({
@@ -189,11 +189,11 @@ app.get('/results', async (req, res) => {
         const currArtist = currSong.track.artists[0].id
 
         try {
-          let currGenres: any[]
+          let currGenres: string[] = []
           if(!artistMap.has(currArtist)) {
             await new Promise((resolve) => setTimeout(resolve, 200))
             const response = await backoffRetry(`/artists/${currArtist}`)
-            currGenres = response.data.genres
+            currGenres = response.genres
             artistMap.set(currArtist, currGenres)
           } else {
             currGenres = artistMap.get(currArtist)
@@ -230,35 +230,48 @@ app.get('/results', async (req, res) => {
       console.log(error)
     }
 
+    const MAX_URI_LENGTH = 100
+
     for (const [playlistGenre, uris] of songMap) {
       if (uris.length >= 10) {
         try {
           const userID = await getUserID()
           const playlistID = await createPlaylist(playlistGenre, userID)
     
-          const data = {
-            uris: uris,
+          // Split the URIs into batches of maximum 100 items each
+          const uriBatches: string[][] = []
+          for (let i = 0; i < uris.length; i += MAX_URI_LENGTH) {
+            const uriBatch = uris.slice(i, i + MAX_URI_LENGTH)
+            uriBatches.push(uriBatch)
           }
     
-          await axios({
-            method: 'post',
-            url: `playlists/${playlistID}/tracks`,
-            data: JSON.stringify(data),
-            headers: {
-              'Content-Type': 'application/json', 
-            },
-          })
+          // Add songs to the playlist in batches
+          for (const uriBatch of uriBatches) {
+            const data = {
+              uris: uriBatch
+            }
     
-          console.log(`Songs added to playlist ${playlistID}`)
+            await axios({
+              method: 'post',
+              url: `playlists/${playlistID}/tracks`,
+              data: JSON.stringify(data),
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            })
+    
+            console.log(`Added ${uriBatch.length} songs to playlist ${playlistID}`)
+          }
+    
         } catch (error) {
           console.log(error)
         }
     
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
     }
-  }
   console.log('Finished All Playlists.')
-});
+})
 
 
 
